@@ -10,6 +10,7 @@ WriteMakefile(
     ABSTRACT_FROM    => 'lib/Net/LDAP/Migrate.pm',
     LICENSE          => 'mit',
     PL_FILES         => {},
+    EXE_FILES        => ['bin/ldapmigrate'],
     MIN_PERL_VERSION => '5.008',
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
