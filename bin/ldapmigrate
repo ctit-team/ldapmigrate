@@ -1,1 +1,99 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
+package main;
+
+################################################################################
+# imports
+################################################################################
+
+# pragma
+use 5.8.8;
+use strict;
+use warnings;
+
+# core modules
+use File::Spec;
+
+# internal modules
+use Net::LDAP::Migrator::ArgumentCollection;
+use Net::LDAP::Migrator::Connection;
+use Net::LDAP::Migrator::Utility;
+
+################################################################################
+# constants
+################################################################################
+
+sub VERSION_ATTRIBUTE() { 'version' }
+
+################################################################################
+# variables
+################################################################################
+
+my $base = connection->root_dse->get_value('namingContexts');
+my $version = get_db_version();
+
+################################################################################
+# operations
+################################################################################
+
+for ($version++;; $version++) {
+    # get script path
+    my $path = get_script_path($version);
+    last unless -f $path;
+
+    # execute script
+    do $path;
+
+    if ($@) {
+        error "$@\n";
+    } elsif (int $!) {
+        error "Failed to execute $path: $!\n";
+    }
+
+    # update database version
+    set_db_version($version);
+}
+
+################################################################################
+# subroutines
+################################################################################
+
+sub get_db_version {
+    # search root object
+    my $res = connection->search('base' => $base, 'scope' => 'base', 'filter' => '(objectClass=*)');
+    if ($res->code) {
+        error "Failed to search root DN: ".$res->error."\n";
+    }
+
+    my $entry = $res->entry(0) || error "Failed to retrieve root DN. It seem like you does not have permission.\n";
+
+    # load current version
+    my $val = $entry->get_value(VERSION_ATTRIBUTE);
+    return defined($val) ? int($val) : 0;
+}
+
+sub get_script_path {
+    my ($version) = @_;
+    my $name;
+
+    if (args->mode == OPERATION_UP) {
+        $name = "$version.up.pl";
+    } elsif (args->mode == OPERATION_DOWN) {
+        $name = "$version.down.pl";
+    } else {
+        die "Invalid mode: ".args->mode."\n";
+    }
+
+    return File::Spec->catfile(args->scripts_dir, $name);
+}
+
+sub set_db_version {
+    my ($version) = @_;
+
+    my $res = connection->modify($base, 'replace' => {
+        VERSION_ATTRIBUTE() => $version
+    });
+
+    if ($res->code) {
+        error "Failed to update database version: ".$res->error."\n";
+    }
+}
